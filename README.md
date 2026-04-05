@@ -1,6 +1,14 @@
+# Lexuau
+A lexer generation library for Luau.
+
+Strongly inspired from [logos](https://github.com/maciejhirsz/logos).
+
+## Example Usage
+
+```luau
 --!strict
 
-local lexer = require("@src")
+local lexer = require("path/to/lexuau")
 
 local my_lexer = lexer.new({
     skip = "[ \t\n\r\f]+",
@@ -36,3 +44,4 @@ end
 -- bar	    ident
 -- =	    eq_sign
 -- 500_450.852	number
+```

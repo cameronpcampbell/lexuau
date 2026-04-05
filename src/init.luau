@@ -1,4 +1,5 @@
 --!strict
+--!optimize 2
 
 local regex_parser = require("@self/regex/parser")
 local hir = require("@self/regex/hir")
@@ -14,14 +15,7 @@ type PatternConfig = string | {
 }
 
 type LexerConfig<SubPatternNames, PatternNames> = {
-    subpatterns: SubPatternNames & ({
-        [string]: string
-    }?),
-    patterns: PatternNames & {
-        [string]: PatternConfig
-    }
-} | {
-    skip: string,
+    skip: string?,
     subpatterns: SubPatternNames & ({
         [string]: string
     }?),
@@ -104,7 +98,7 @@ local function new<SubPatternNames, PatternNames>(
     local pattern_callbacks: { [number]: (string) -> string? } = {}
     local skip_id: number? = nil
 
-    if (config :: any).skip and config.skip ~= "" then
+    if config.skip and config.skip ~= "" then
         local resolved_skip = subpattern.resolve(
             config.subpatterns :: { [string]: string }?,
             { _skip = config.skip }

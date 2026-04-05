@@ -1,4 +1,5 @@
 --!strict
+--!optimize 2
 
 local dfa = require("./regex/dfa")
 type DFA = dfa.DFA

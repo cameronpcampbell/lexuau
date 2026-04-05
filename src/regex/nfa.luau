@@ -1,4 +1,5 @@
 --!strict
+--!optimize 2
 
 local hir = require("./hir")
 type HirNode = hir.HirNode

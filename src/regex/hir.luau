@@ -1,4 +1,5 @@
 --!strict
+--!optimize 2
 
 export type Range = { low: number, high: number }
 
