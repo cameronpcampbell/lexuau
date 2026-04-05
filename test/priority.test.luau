@@ -1,6 +1,6 @@
 local lexer = require("@src")
 
--- Test 1: Priority — "for" literal (priority 6) should beat [a-zA-Z]+ (priority 2).
+-- Test 1: Priority: "for" literal (priority 6) should beat [a-zA-Z]+ (priority 2).
 local keyword_lexer = lexer.new({
     skip = "[ \t\n]+",
     patterns = {
@@ -18,7 +18,7 @@ end
 -- [foreach] ident
 -- [x]      ident
 
--- Test 2: Callback — transform value.
+-- Test 2: Callback: transform value.
 local transform_lexer = lexer.new({
     skip = "[ \t\n]+",
     patterns = {
@@ -41,7 +41,7 @@ end
 -- [42]     number
 -- [WORLD]  upper_ident
 
--- Test 3: Callback — skip (return nil).
+-- Test 3: Callback: skip (return nil).
 local skip_lexer = lexer.new({
     skip = "[ \t\n]+",
     patterns = {

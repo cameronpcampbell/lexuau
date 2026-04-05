@@ -7,7 +7,7 @@ local my_lexer = lexer.new({
 
     subpatterns = {
         numsect = "_*[\\d]+_*",
-        num = "((?&numsect)+\.)?(?&numsect)+|\.(?&numsect)"
+        num = "((?&numsect)+\\.)?(?&numsect)+|\\.(?&numsect)"
     },
 
     patterns = {
@@ -19,7 +19,7 @@ local my_lexer = lexer.new({
 local lexed = my_lexer.lex("hello 5 + world")
 
 for value, kind in lexed do
-    print(value, kind)
+    print(`[{value}] [{#value}]`, kind)
 end
 
 -- "hello", "ident"

@@ -2,9 +2,8 @@
 
 local subpattern = {}
 
--- Resolves (?&name) references in all patterns by textual substitution.
--- Subpatterns can reference earlier subpatterns. Each substitution is
--- wrapped in (?:...) to preserve grouping semantics.
+-- Resolves (?&name) references by textual substitution wrapped in (?:...).
+-- Keys are sorted for deterministic resolution order.
 function subpattern.resolve(
     subpatterns: { [string]: string }?,
     patterns: { [string]: string }
@@ -13,17 +12,13 @@ function subpattern.resolve(
     local sub_order: { string } = {}
 
     if subpatterns then
-        -- Collect keys and resolve in insertion order.
-        -- Luau tables don't guarantee order, so we sort for determinism.
         for name in subpatterns do
             table.insert(sub_order, name)
         end
         table.sort(sub_order)
 
-        -- Resolve subpatterns in order, allowing later ones to reference earlier ones.
         for _, name in sub_order do
             local value = subpatterns[name]
-            -- Replace any (?&ref) with already-resolved subpatterns.
             for _, resolved_name in sub_order do
                 if resolved_subs[resolved_name] then
                     value = string.gsub(value, "%(%?%&" .. resolved_name .. "%)", "(?:" .. resolved_subs[resolved_name] .. ")")
@@ -33,7 +28,6 @@ function subpattern.resolve(
         end
     end
 
-    -- Resolve patterns by substituting all subpattern references.
     local result: { [string]: string } = {}
     for name, value in patterns do
         local resolved = value

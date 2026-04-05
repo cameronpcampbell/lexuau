@@ -16,7 +16,7 @@ print("Should error:", not ok)
 print("Error:", err)
 
 -- No conflict: different priorities.
-local ok2, err2 = pcall(function()
+local ok2, _err2 = pcall(function()
     lexer.new({
         skip = "[ \t\n]+",
         patterns = {

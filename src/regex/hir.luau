@@ -63,21 +63,31 @@ function hir.empty(): HirNode
     return { tag = "empty" }
 end
 
--- Predefined character classes as sorted ranges of byte values.
+local BYTE_TAB = 0x09
+local BYTE_RETURN = 0x0D
+local BYTE_SPACE = 0x20
+local BYTE_ZERO = 0x30
+local BYTE_NINE = 0x39
+local BYTE_UPPER_A = 0x41
+local BYTE_UPPER_Z = 0x5A
+local BYTE_UNDERSCORE = 0x5F
+local BYTE_LOWER_A = 0x61
+local BYTE_LOWER_Z = 0x7A
+
 hir.classes = {}
 
-hir.classes.digit = { { low = 0x30, high = 0x39 } }
+hir.classes.digit = { { low = BYTE_ZERO, high = BYTE_NINE } }
 
 hir.classes.word = {
-    { low = 0x30, high = 0x39 },
-    { low = 0x41, high = 0x5A },
-    { low = 0x5F, high = 0x5F },
-    { low = 0x61, high = 0x7A },
+    { low = BYTE_ZERO, high = BYTE_NINE },
+    { low = BYTE_UPPER_A, high = BYTE_UPPER_Z },
+    { low = BYTE_UNDERSCORE, high = BYTE_UNDERSCORE },
+    { low = BYTE_LOWER_A, high = BYTE_LOWER_Z },
 }
 
 hir.classes.space = {
-    { low = 0x09, high = 0x0D },
-    { low = 0x20, high = 0x20 },
+    { low = BYTE_TAB, high = BYTE_RETURN },
+    { low = BYTE_SPACE, high = BYTE_SPACE },
 }
 
 function hir.negate_class(ranges: { Range }): { Range }
@@ -101,8 +111,8 @@ function hir.negate_class(ranges: { Range }): { Range }
     return result
 end
 
--- Compute priority from HIR structure, matching Logos's formula.
--- Higher priority wins when multiple patterns match same length.
+-- Matches Logos's priority formula: literals/classes=2, concat=sum,
+-- alternation=min, repetition=min*child, group=child, anchors/empty=0.
 function hir.priority(node: HirNode): number
     if node.tag == "literal" or node.tag == "class" or node.tag == "dot" then
         return 2
@@ -128,7 +138,6 @@ function hir.priority(node: HirNode): number
         return hir.priority(node.child)
     end
 
-    -- Anchor, empty.
     return 0
 end
 
