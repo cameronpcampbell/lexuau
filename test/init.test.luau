@@ -6,7 +6,7 @@ local my_lexer = lexer.new({
     skip = "[ \t\n\r\f]+",
 
     subpatterns = {
-        numsect = "_*[\d]+_*",
+        numsect = "_*[\\d]+_*",
         num = "((?&numsect)+\.)?(?&numsect)+|\.(?&numsect)"
     },
 

@@ -49,7 +49,6 @@ local function new<Skip, SubPatternNames, PatternNames>(
 
     -- Add skip pattern if provided.
     if config.skip ~= "" then
-        -- Resolve subpatterns in the skip pattern too.
         local resolved_skip = subpattern.resolve(
             config.subpatterns :: { [string]: string }?,
             { _skip = config.skip }

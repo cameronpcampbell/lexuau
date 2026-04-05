@@ -25,9 +25,9 @@ function lexer.new(
             local cursor = position
 
             -- Check if start state itself accepts.
-            local start_state = compiled.states[current_state]
-            if start_state.accept then
-                last_accept_id = start_state.accept
+            local start_accept = compiled.states[current_state].accept
+            if start_accept then
+                last_accept_id = start_accept
                 last_accept_pos = cursor
             end
 
@@ -54,7 +54,7 @@ function lexer.new(
                 local value = string.sub(content, position, last_accept_pos - 1)
                 position = last_accept_pos
 
-                -- Skip pattern produces no token.
+                -- Skip pattern: consume and restart (trivia pass).
                 if last_accept_id == skip_id then
                     continue
                 end
