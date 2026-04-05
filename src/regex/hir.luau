@@ -101,4 +101,35 @@ function hir.negate_class(ranges: { Range }): { Range }
     return result
 end
 
+-- Compute priority from HIR structure, matching Logos's formula.
+-- Higher priority wins when multiple patterns match same length.
+function hir.priority(node: HirNode): number
+    if node.tag == "literal" or node.tag == "class" or node.tag == "dot" then
+        return 2
+
+    elseif node.tag == "concat" then
+        local total = 0
+        for _, child in node.children do
+            total += hir.priority(child)
+        end
+        return total
+
+    elseif node.tag == "alternation" then
+        local minimum = math.huge
+        for _, child in node.children do
+            minimum = math.min(minimum, hir.priority(child))
+        end
+        return minimum
+
+    elseif node.tag == "repetition" then
+        return node.min * hir.priority(node.child)
+
+    elseif node.tag == "group" then
+        return hir.priority(node.child)
+    end
+
+    -- Anchor, empty.
+    return 0
+end
+
 return hir

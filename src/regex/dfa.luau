@@ -22,16 +22,19 @@ local function state_set_key(ids: { number }): string
 end
 
 -- Determine the accepting pattern for a DFA state.
--- Lowest pattern index wins (highest priority).
-local function find_accept(automaton: NFA, nfa_ids: { number }): number?
+-- Highest priority wins. Lowest pattern index breaks ties.
+local function find_accept(automaton: NFA, nfa_ids: { number }, priorities: { [number]: number }): number?
     local best: number? = nil
+    local best_priority = -math.huge
     for _, state_id in nfa_ids do
         local accept = automaton.states[state_id].accept
         if not accept then
             continue
         end
-        if not best or accept < best then
+        local priority = priorities[accept] or 0
+        if not best or priority > best_priority or (priority == best_priority and accept < best) then
             best = accept
+            best_priority = priority
         end
     end
     return best
@@ -61,7 +64,8 @@ local function collect_active_bytes(automaton: NFA, nfa_ids: { number }): { numb
 end
 
 -- Build a DFA from an NFA using subset (powerset) construction.
-function dfa.build(automaton: NFA): DFA
+-- Priorities maps pattern index to its priority value.
+function dfa.build(automaton: NFA, priorities: { [number]: number }): DFA
     local result: DFA = {
         states = {},
         start = 0,
@@ -80,7 +84,7 @@ function dfa.build(automaton: NFA): DFA
     result.states[next_id] = {
         id = next_id,
         transitions = {},
-        accept = find_accept(automaton, start_set),
+        accept = find_accept(automaton, start_set, priorities),
     }
     next_id += 1
     table.insert(queue, start_set)
@@ -113,7 +117,7 @@ function dfa.build(automaton: NFA): DFA
                 result.states[target_id] = {
                     id = target_id,
                     transitions = {},
-                    accept = find_accept(automaton, target_set),
+                    accept = find_accept(automaton, target_set, priorities),
                 }
                 table.insert(queue, target_set)
             end
@@ -258,8 +262,9 @@ function dfa.deduplicate(compiled: DFA)
 end
 
 -- Full build pipeline: NFA -> DFA -> optimized DFA.
-function dfa.from_nfa(automaton: NFA): DFA
-    local compiled = dfa.build(automaton)
+-- Priorities maps pattern index to its priority value.
+function dfa.from_nfa(automaton: NFA, priorities: { [number]: number }): DFA
+    local compiled = dfa.build(automaton, priorities)
     dfa.prune_dead_states(compiled)
     dfa.deduplicate(compiled)
     return compiled

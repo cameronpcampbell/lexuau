@@ -11,6 +11,7 @@ function lexer.new(
     compiled: DFA,
     skip_id: number,
     pattern_names: { [number]: string },
+    pattern_callbacks: { [number]: (string) -> string? },
     content: string
 ): () -> (string?, string?)
     local position = 1
@@ -49,23 +50,33 @@ function lexer.new(
                 last_accept_pos = cursor
             end
 
-            -- A pattern matched.
-            if last_accept_id and last_accept_pos then
-                local value = string.sub(content, position, last_accept_pos - 1)
-                position = last_accept_pos
-
-                -- Skip pattern: consume and restart (trivia pass).
-                if last_accept_id == skip_id then
-                    continue
-                end
-
-                return value, pattern_names[last_accept_id]
+            -- No pattern matched; emit a single byte with nil kind.
+            if not last_accept_id or not last_accept_pos then
+                local value = string.sub(content, position, position)
+                position += 1
+                return value, nil
             end
 
-            -- No pattern matched; emit a single byte with nil kind.
-            local value = string.sub(content, position, position)
-            position += 1
-            return value, nil
+            local value = string.sub(content, position, last_accept_pos - 1)
+            position = last_accept_pos
+
+            -- Skip pattern: consume and restart (trivia pass).
+            if last_accept_id == skip_id then
+                continue
+            end
+
+            -- Execute callback if one exists for this pattern.
+            local callback = pattern_callbacks[last_accept_id]
+            if callback then
+                local result = callback(value)
+                -- Callback returned nil: skip this token.
+                if result == nil then
+                    continue
+                end
+                value = result
+            end
+
+            return value, pattern_names[last_accept_id]
         end
 
         -- End of input.
