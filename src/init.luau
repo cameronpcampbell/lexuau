@@ -40,6 +40,34 @@ type TokenDisciminants<Ident> = {
     value: string
 }
 
+-- Check for pattern conflicts and raise an error listing them.
+local function check_conflicts(
+    conflicts: { dfa.Conflict },
+    pattern_names: { [number]: string },
+    pattern_priorities: { [number]: number }
+)
+    if #conflicts == 0 then
+        return
+    end
+
+    -- Deduplicate conflicts by pattern pair.
+    local seen: { [string]: boolean } = {}
+    local unique: { string } = {}
+
+    for _, conflict in conflicts do
+        local name_a = pattern_names[conflict.pattern_a] or "(skip)"
+        local name_b = pattern_names[conflict.pattern_b] or "(skip)"
+        local key = `{name_a},{name_b}`
+        if seen[key] then
+            continue
+        end
+        seen[key] = true
+        table.insert(unique, `  '{name_a}' and '{name_b}' (both priority {conflict.priority})`)
+    end
+
+    error(`Pattern conflicts detected:\n{table.concat(unique, "\n")}`)
+end
+
 local function new<Skip, SubPatternNames, PatternNames>(
     config: LexerConfig<Skip, SubPatternNames, PatternNames>
 )
@@ -104,7 +132,8 @@ local function new<Skip, SubPatternNames, PatternNames>(
 
     -- Build combined NFA from all patterns, then convert to optimized DFA.
     local combined_nfa = nfa.build(pattern_hirs)
-    local compiled_dfa = dfa.from_nfa(combined_nfa, pattern_priorities)
+    local compiled_dfa, conflicts = dfa.from_nfa(combined_nfa, pattern_priorities)
+    check_conflicts(conflicts, pattern_names, pattern_priorities)
 
     return {
         lex = function(content: string)

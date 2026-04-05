@@ -21,23 +21,73 @@ local function state_set_key(ids: { number }): string
     return table.concat(ids, ",")
 end
 
+export type Conflict = {
+    pattern_a: number,
+    pattern_b: number,
+    priority: number,
+}
+
 -- Determine the accepting pattern for a DFA state.
 -- Highest priority wins. Lowest pattern index breaks ties.
-local function find_accept(automaton: NFA, nfa_ids: { number }, priorities: { [number]: number }): number?
-    local best: number? = nil
-    local best_priority = -math.huge
+-- Also detects conflicts: two different patterns at the same highest priority.
+local function find_accept(
+    automaton: NFA,
+    nfa_ids: { number },
+    priorities: { [number]: number },
+    conflicts: { Conflict }
+): number?
+    -- Collect all accepting pattern IDs with their priorities.
+    local accepting: { { id: number, priority: number } } = {}
     for _, state_id in nfa_ids do
         local accept = automaton.states[state_id].accept
         if not accept then
             continue
         end
         local priority = priorities[accept] or 0
-        if not best or priority > best_priority or (priority == best_priority and accept < best) then
-            best = accept
-            best_priority = priority
+        table.insert(accepting, { id = accept, priority = priority })
+    end
+
+    if #accepting == 0 then
+        return nil
+    end
+
+    -- Find the highest priority.
+    local best_priority = -math.huge
+    for _, entry in accepting do
+        if entry.priority > best_priority then
+            best_priority = entry.priority
         end
     end
-    return best
+
+    -- Collect all patterns at the highest priority.
+    local top: { number } = {}
+    local seen: { [number]: boolean } = {}
+    for _, entry in accepting do
+        if entry.priority ~= best_priority then
+            continue
+        end
+        if seen[entry.id] then
+            continue
+        end
+        seen[entry.id] = true
+        table.insert(top, entry.id)
+    end
+
+    -- If multiple distinct patterns share the top priority, record a conflict.
+    if #top > 1 then
+        table.sort(top)
+        for index = 2, #top do
+            table.insert(conflicts, {
+                pattern_a = top[1],
+                pattern_b = top[index],
+                priority = best_priority,
+            })
+        end
+    end
+
+    -- Lowest pattern index wins the tiebreak.
+    table.sort(top)
+    return top[1]
 end
 
 -- Collect all distinct byte values that cause transitions from a set of NFA states.
@@ -65,11 +115,13 @@ end
 
 -- Build a DFA from an NFA using subset (powerset) construction.
 -- Priorities maps pattern index to its priority value.
-function dfa.build(automaton: NFA, priorities: { [number]: number }): DFA
+-- Returns the DFA and a list of detected conflicts.
+function dfa.build(automaton: NFA, priorities: { [number]: number }): (DFA, { Conflict })
     local result: DFA = {
         states = {},
         start = 0,
     }
+    local conflicts: { Conflict } = {}
 
     local next_id = 0
     local key_to_id: { [string]: number } = {}
@@ -84,7 +136,7 @@ function dfa.build(automaton: NFA, priorities: { [number]: number }): DFA
     result.states[next_id] = {
         id = next_id,
         transitions = {},
-        accept = find_accept(automaton, start_set, priorities),
+        accept = find_accept(automaton, start_set, priorities, conflicts),
     }
     next_id += 1
     table.insert(queue, start_set)
@@ -117,7 +169,7 @@ function dfa.build(automaton: NFA, priorities: { [number]: number }): DFA
                 result.states[target_id] = {
                     id = target_id,
                     transitions = {},
-                    accept = find_accept(automaton, target_set, priorities),
+                    accept = find_accept(automaton, target_set, priorities, conflicts),
                 }
                 table.insert(queue, target_set)
             end
@@ -126,7 +178,7 @@ function dfa.build(automaton: NFA, priorities: { [number]: number }): DFA
         end
     end
 
-    return result
+    return result, conflicts
 end
 
 -- Remove states that can never reach an accepting state.
@@ -263,11 +315,12 @@ end
 
 -- Full build pipeline: NFA -> DFA -> optimized DFA.
 -- Priorities maps pattern index to its priority value.
-function dfa.from_nfa(automaton: NFA, priorities: { [number]: number }): DFA
-    local compiled = dfa.build(automaton, priorities)
+-- Returns the DFA and a list of detected conflicts.
+function dfa.from_nfa(automaton: NFA, priorities: { [number]: number }): (DFA, { Conflict })
+    local compiled, conflicts = dfa.build(automaton, priorities)
     dfa.prune_dead_states(compiled)
     dfa.deduplicate(compiled)
-    return compiled
+    return compiled, conflicts
 end
 
 return dfa
