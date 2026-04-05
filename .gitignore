@@ -1,0 +1,27 @@
+# MacOS file system clutter.
+._*
+.DS_STORE
+
+/*.git
+
+/*.zip
+
+/*.rbxm
+
+/sourcemap.json
+
+# IDEs
+.idea/       # JetBrains (CLion, IntelliJ, etc.)
+.vscode/
+.trae/
+.zed/
+*.swp        # Vim swap files
+*.swo        # Vim swap overflow files
+
+# AI agents
+.claude/
+.cursor/
+.aider/
+.copilot/
+.codex/
+.gemini/
