@@ -11,7 +11,7 @@ local Session = require("@self/lexer")
 type PatternConfig = string | {
     pattern: string,
     priority: number?,
-    callback: ((string, Session.Session) -> string?)?,
+    callback: ((string, Session.Session) -> (string?, Session.Session?))?,
 }
 
 type LexerConfig<SubPatternNames, PatternNames> = {
@@ -108,7 +108,7 @@ local function new<SubPatternNames, PatternNames>(
 )
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
-    local callbacks: { [string]: ((string, Session.Session) -> string?)? } = {}
+    local callbacks: { [string]: ((string, Session.Session) -> (string?, Session.Session?))? } = {}
 
     for name, value in config.patterns :: { [string]: PatternConfig } do
         if type(value) == "string" then
@@ -129,7 +129,7 @@ local function new<SubPatternNames, PatternNames>(
     local pattern_hirs = {}
     local pattern_names: { [number]: string } = {}
     local pattern_priorities: { [number]: number } = {}
-    local pattern_callbacks: { [number]: (string, Session.Session) -> string? } = {}
+    local pattern_callbacks: { [number]: (string, Session.Session) -> (string?, Session.Session?) } = {}
     local skip_id: number? = nil
 
     if config.skip and config.skip ~= "" then

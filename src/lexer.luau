@@ -11,7 +11,7 @@ export type Profile = {
 	compiled_dfa: DFA,
 	skip_id: number?,
 	pattern_names: { [number]: string },
-	pattern_callbacks: { [number]: (string, Session) -> string? },
+	pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
 }
 
 export type Session = typeof(setmetatable(
@@ -23,8 +23,9 @@ export type Session = typeof(setmetatable(
 		start: number,
 		skip_id: number?,
 		pattern_names: { [number]: string },
-		pattern_callbacks: { [number]: (string, Session) -> string? },
+		pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
 		morphed: boolean,
+		successor: Session?,
 	},
 	Session
 ))
@@ -40,6 +41,7 @@ function Session.new(profile: Profile, content: string, position: number?): Sess
 		pattern_names = profile.pattern_names,
 		pattern_callbacks = profile.pattern_callbacks,
 		morphed = false,
+		successor = nil :: Session?,
 	}, Session)
 end
 
@@ -49,7 +51,9 @@ function Session.morph(self: Session, target: { _profile: Profile }): Session
 	end
 
 	self.morphed = true
-	return Session.new(target._profile, self.content, self.position)
+	local new_session = Session.new(target._profile, self.content, self.position)
+	self.successor = new_session
+	return new_session
 end
 
 function Session.iter(self: Session): () -> (string?, string?)
@@ -109,10 +113,16 @@ function Session.iter(self: Session): () -> (string?, string?)
 				continue
 			end
 
+			local kind = self.pattern_names[last_accept_id]
 			local callback = self.pattern_callbacks[last_accept_id]
 
 			if callback then
-				local result = callback(value, self)
+				local result, morph_session = callback(value, self)
+
+				-- If the callback morphed, follow the successor.
+				if morph_session then
+					self = morph_session
+				end
 
 				if result == nil then
 					continue
@@ -121,7 +131,7 @@ function Session.iter(self: Session): () -> (string?, string?)
 				value = result
 			end
 
-			return value, self.pattern_names[last_accept_id]
+			return value, kind
 		end
 
 		return nil, nil
