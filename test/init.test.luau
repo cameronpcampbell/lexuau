@@ -1,8 +1,8 @@
 --!strict
 
-local lexer = require("@src")
+local lexuau = require("@src")
 
-local my_lexer = lexer.new({
+local my_lexer = lexuau.new({
     skip = "[ \t\n\r\f]+",
 
     subpatterns = {
@@ -27,7 +27,6 @@ local lexed = my_lexer.lex([[
 for value, kind in lexed do
     print(value, kind)
 end
-
 -- local	local_keyword
 -- foo	    ident
 -- =	    eq_sign

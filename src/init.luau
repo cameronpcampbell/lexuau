@@ -6,12 +6,12 @@ local hir = require("@self/regex/hir")
 local nfa = require("@self/regex/nfa")
 local dfa = require("@self/regex/dfa")
 local subpattern = require("@self/subpattern")
-local lexer = require("@self/lexer")
+local Session = require("@self/lexer")
 
 type PatternConfig = string | {
     pattern: string,
     priority: number?,
-    callback: ((string) -> string?)?,
+    callback: ((string, Session.Session) -> string?)?,
 }
 
 type LexerConfig<SubPatternNames, PatternNames> = {
@@ -29,8 +29,42 @@ type function FieldNames(input: type)
 
     local names: { type } = {}
 
-    for key in input:properties() do
+    for key, value in input:properties() do
         table.insert(names, key)
+
+        -- Check if this pattern has a callback that morphs into another lexer.
+        local read_type = value.read
+        if not read_type or not read_type:is("table") then
+            continue
+        end
+
+        local callback_key = types.singleton("callback")
+        local callback_type = read_type:readproperty(callback_key)
+        if not callback_type or not callback_type:is("function") then
+            continue
+        end
+
+        local returns = callback_type:returns()
+        if not returns.head or #returns.head < 2 then
+            continue
+        end
+
+        -- The second return value is typeof(target_lexer).
+        local morph_target = returns.head[2]
+        if not morph_target:is("table") then
+            continue
+        end
+
+        -- Read the _patterns phantom field from the morph target.
+        local target_patterns = morph_target:readproperty(types.singleton("_patterns"))
+        if not target_patterns or not target_patterns:is("table") then
+            continue
+        end
+
+        -- Collect the morph target's pattern names.
+        for target_key in target_patterns:properties() do
+            table.insert(names, target_key)
+        end
     end
 
     return types.unionof(table.unpack(names))
@@ -74,7 +108,7 @@ local function new<SubPatternNames, PatternNames>(
 )
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
-    local callbacks: { [string]: ((string) -> string?)? } = {}
+    local callbacks: { [string]: ((string, Session.Session) -> string?)? } = {}
 
     for name, value in config.patterns :: { [string]: PatternConfig } do
         if type(value) == "string" then
@@ -95,7 +129,7 @@ local function new<SubPatternNames, PatternNames>(
     local pattern_hirs = {}
     local pattern_names: { [number]: string } = {}
     local pattern_priorities: { [number]: number } = {}
-    local pattern_callbacks: { [number]: (string) -> string? } = {}
+    local pattern_callbacks: { [number]: (string, Session.Session) -> string? } = {}
     local skip_id: number? = nil
 
     if config.skip and config.skip ~= "" then
@@ -134,16 +168,19 @@ local function new<SubPatternNames, PatternNames>(
 
     check_conflicts(conflicts, pattern_names, pattern_priorities)
 
+    local profile: Session.Profile = {
+        compiled_dfa = compiled_dfa,
+        skip_id = skip_id,
+        pattern_names = pattern_names,
+        pattern_callbacks = pattern_callbacks,
+    }
+
     return {
+        _profile = profile,
+        _patterns = {} :: PatternNames,
         lex = function(content: string)
-            return lexer.new(
-                compiled_dfa,
-                skip_id,
-                pattern_names,
-                pattern_callbacks,
-                content
-            ) :: () -> (string, FieldNames<PatternNames>)
-        end
+            return Session.new(profile, content)
+        end,
     }
 end
 

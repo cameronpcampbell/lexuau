@@ -32,9 +32,7 @@ local lexed = my_lexer.lex([[
     local bar = 500_450.852
 ]])
 
-for value, kind in lexed do
-    print(value, kind)
-end
+print(lexed)
 
 -- local	local_keyword
 -- foo	    ident
