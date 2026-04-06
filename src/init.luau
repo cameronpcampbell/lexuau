@@ -24,6 +24,12 @@ type LexerConfig<SubPatternNames, PatternNames> = {
     }
 }
 
+export type Lexer<PatternNames = { [string]: PatternConfig }> = {
+    _profile: Session.Profile,
+    _patterns: PatternNames,
+    lex: (content: string) -> Session.Session,
+}
+
 type function FieldNames(input: type)
     assert(input.tag, "table")
 
@@ -70,11 +76,6 @@ type function FieldNames(input: type)
     return types.unionof(table.unpack(names))
 end
 
-type TokenDisciminants<Ident> = {
-    kind: Ident?,
-    value: string
-}
-
 local function check_conflicts(
     conflicts: { dfa.Conflict },
     pattern_names: { [number]: string },
@@ -105,7 +106,7 @@ end
 
 local function new<SubPatternNames, PatternNames>(
     config: LexerConfig<SubPatternNames, PatternNames>
-)
+): Lexer<PatternNames>
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
     local callbacks: { [string]: ((string, Session.Session) -> (string?, Session.Session?))? } = {}
