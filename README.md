@@ -8,9 +8,9 @@ Strongly inspired from [logos](https://github.com/maciejhirsz/logos).
 ```luau
 --!strict
 
-local lexer = require("path/to/lexuau")
+local lexuau = require("path/to/lexuau")
 
-local my_lexer = lexer.new({
+local my_lexer = lexuau.new({
     skip = "[ \t\n\r\f]+",
 
     subpatterns = {
