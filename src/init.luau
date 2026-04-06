@@ -16,12 +16,12 @@ export type PatternConfig = string | {
     }))?,
 }
 
-export type LexerConfig<SubPatternNames, PatternNames> = {
+export type LexerConfig = {
     skip: string?,
-    subpatterns: SubPatternNames & ({
+    subpatterns: {
         [string]: string
-    }?),
-    patterns: PatternNames & {
+    }?,
+    patterns: {
         [string]: PatternConfig
     }
 }
@@ -29,55 +29,8 @@ export type LexerConfig<SubPatternNames, PatternNames> = {
 export type Lexer<PatternNames> = {
     _profile: lexer.Profile,
     _patterns: PatternNames,
-    lex: (content: string) -> () -> (string?, FieldNames<PatternNames>),
+    lex: (content: string) -> () -> (string, string?),
 }
-
-type function FieldNames(input: type)
-    assert(input:is("table"))
-
-    local names: { type } = {}
-
-    for key, value in input:properties() do
-        table.insert(names, key)
-
-        -- Check if this pattern has a callback that morphs into another lexer.
-        local read_type = value.read
-        if not read_type or not read_type:is("table") then
-            continue
-        end
-
-        local callback_key = types.singleton("callback")
-        local callback_type = read_type:readproperty(callback_key)
-        if not callback_type or not callback_type:is("function") then
-            continue
-        end
-
-        local returns = callback_type:returns()
-        if not returns.head or #returns.head < 2 then
-            continue
-        end
-
-        -- The second return value is typeof(target_lexer).
-        local morph_target = returns.head[2]
-
-        if not morph_target:is("table") then
-            continue
-        end
-
-        -- Read the _patterns phantom field from the morph target.
-        local target_patterns = morph_target:readproperty(types.singleton("_patterns"))
-        if not target_patterns or not target_patterns:is("table") then
-            continue
-        end
-
-        -- Collect the morph target's pattern names.
-        for target_key in target_patterns:properties() do
-            table.insert(names, target_key)
-        end
-    end
-
-    return types.unionof(table.unpack(names))
-end
 
 local function check_conflicts(
     conflicts: { dfa.Conflict },
@@ -107,14 +60,14 @@ local function check_conflicts(
     error(`Pattern conflicts detected:\n{table.concat(unique, "\n")}`)
 end
 
-local function new<SubPatternNames, PatternNames>(
-    config: LexerConfig<SubPatternNames, PatternNames>
-): Lexer<PatternNames>
+local function new<Config>(
+    config: LexerConfig
+): Lexer<{ [string]: string }>
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
     local callbacks: { [string]: ((string, lexer.Session) -> (string?, lexer.Session?))? } = {}
 
-    for name, value in config.patterns :: { [string]: PatternConfig } do
+    for name, value in config.patterns do
         if type(value) == "string" then
             raw_patterns[name] = value
         else
@@ -136,10 +89,10 @@ local function new<SubPatternNames, PatternNames>(
     local pattern_callbacks: { [number]: (string, lexer.Session) -> (string?, lexer.Session?) } = {}
     local skip_id: number? = nil
 
-    if config.skip and config.skip ~= "" then
+    if config.skip ~= nil and (config :: LexerConfig).skip ~= "" then
         local resolved_skip = subpattern.resolve(
-            config.subpatterns :: { [string]: string }?,
-            { _skip = config.skip }
+            (config :: LexerConfig).subpatterns :: { [string]: string }?,
+            { _skip = (config :: LexerConfig).skip }
         )._skip
 
         local skip_hir = regex_parser.parse(resolved_skip)
@@ -181,7 +134,7 @@ local function new<SubPatternNames, PatternNames>(
 
     return {
         _profile = profile,
-        _patterns = {} :: PatternNames,
+        _patterns = {},
         lex = function(content: string)
             return lexer.new(profile, content) :: any
         end,
