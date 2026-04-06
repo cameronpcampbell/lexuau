@@ -26,9 +26,9 @@ export type LexerConfig = {
     }
 }
 
-export type Lexer<PatternNames> = {
+export type Lexer = {
     _profile: lexer.Profile,
-    _patterns: PatternNames,
+    _patterns: { [string]: string },
     lex: (content: string) -> () -> (string, string?),
 }
 
@@ -62,7 +62,7 @@ end
 
 local function new<Config>(
     config: LexerConfig
-): Lexer<{ [string]: string }>
+): Lexer
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
     local callbacks: { [string]: ((string, lexer.Session) -> (string?, lexer.Session?))? } = {}
