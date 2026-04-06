@@ -73,6 +73,8 @@ type function FieldNames(input: type)
         end
     end
 
+    print(names[1])
+
     return types.unionof(table.unpack(names))
 end
 

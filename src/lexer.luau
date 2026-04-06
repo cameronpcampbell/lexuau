@@ -14,21 +14,18 @@ export type Profile = {
 	pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
 }
 
-export type Session = typeof(setmetatable(
-	{} :: {
-		position: number,
-		length: number,
-		content: string,
-		states: { [number]: dfa.DFAState },
-		start: number,
-		skip_id: number?,
-		pattern_names: { [number]: string },
-		pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
-		morphed: boolean,
-		successor: Session?,
-	},
-	Session
-))
+export type Session = setmetatable<{
+	position: number,
+	length: number,
+	content: string,
+	states: { [number]: dfa.DFAState },
+	start: number,
+	skip_id: number?,
+	pattern_names: { [number]: string },
+	pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
+	morphed: boolean,
+	successor: Session?,
+}, typeof(Session)>
 
 function Session.new(profile: Profile, content: string, position: number?): Session
 	return setmetatable({
