@@ -24,6 +24,7 @@ export type Session = setmetatable<{
 	pattern_names: { [number]: string },
 	pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
 	morphed: boolean,
+	in_callback: boolean,
 	successor: Session?,
 }, typeof(Session)>
 
@@ -38,22 +39,26 @@ function Session.new(profile: Profile, content: string, position: number?): Sess
 		pattern_names = profile.pattern_names,
 		pattern_callbacks = profile.pattern_callbacks,
 		morphed = false,
+		in_callback = false,
 		successor = nil :: Session?,
 	}, Session)
 end
 
-function Session.morph(self: Session, target: { _profile: Profile }): Session
+function Session.morph<T>(self: Session, target: T & { _profile: Profile }): T
+	if not self.in_callback then
+		error("Cannot morph outside of a callback.")
+	end
+
 	if self.morphed then
 		error("Cannot morph an already morphed session.")
 	end
 
 	self.morphed = true
-	local new_session = Session.new(target._profile, self.content, self.position)
-	self.successor = new_session
-	return new_session
+	self.successor = Session.new(target._profile, self.content, self.position)
+	return target
 end
 
-function Session.iter(self: Session): () -> (string?, string?)
+function Session.__iter(self: Session)
 	return function(): (string?, string?)
 		while self.position <= self.length do
 			if self.morphed then
@@ -114,11 +119,13 @@ function Session.iter(self: Session): () -> (string?, string?)
 			local callback = self.pattern_callbacks[last_accept_id]
 
 			if callback then
-				local result, morph_session = callback(value, self)
+				self.in_callback = true
+				local result = callback(value, self)
+				self.in_callback = false
 
 				-- If the callback morphed, follow the successor.
-				if morph_session then
-					self = morph_session
+				if self.successor then
+					self = self.successor :: Session
 				end
 
 				if result == nil then
@@ -133,10 +140,6 @@ function Session.iter(self: Session): () -> (string?, string?)
 
 		return nil, nil
 	end
-end
-
-function Session.__iter(self: Session)
-	return self:iter()
 end
 
 return Session
