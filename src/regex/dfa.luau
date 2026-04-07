@@ -1,4 +1,5 @@
 --!strict
+--!optimize 2
 
 local nfa = require("./nfa")
 type NFA = nfa.NFA

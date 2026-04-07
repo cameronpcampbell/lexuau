@@ -4,6 +4,7 @@ local lexer = require("@src")
 local ok, err = pcall(function()
     lexer.new({
         skip = "[ \t\n]+",
+        init_state = function() return nil end,
         patterns = {
             alpha = "[a-zA-Z]+",
             word = "[a-zA-Z]+",
@@ -19,6 +20,7 @@ print("Error:", err)
 local ok2, _err2 = pcall(function()
     lexer.new({
         skip = "[ \t\n]+",
+        init_state = function() return nil end,
         patterns = {
             alpha = {
                 pattern = "[a-zA-Z]+",

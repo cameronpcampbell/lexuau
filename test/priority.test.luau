@@ -3,6 +3,7 @@ local lexer = require("@src")
 -- Test 1: Priority: "for" literal (priority 6) should beat [a-zA-Z]+ (priority 2).
 local keyword_lexer = lexer.new({
     skip = "[ \t\n]+",
+    init_state = function() return nil end,
     patterns = {
         keyword_for = "for",
         ident = "[a-zA-Z]+",
@@ -21,6 +22,7 @@ end
 -- Test 2: Callback: transform value.
 local transform_lexer = lexer.new({
     skip = "[ \t\n]+",
+    init_state = function() return nil end,
     patterns = {
         upper_ident = {
             pattern = "[a-zA-Z]+",
@@ -44,6 +46,7 @@ end
 -- Test 3: Callback: skip (return nil).
 local skip_lexer = lexer.new({
     skip = "[ \t\n]+",
+    init_state = function() return nil end,
     patterns = {
         comment = {
             pattern = "//[^\n]*",
@@ -67,6 +70,7 @@ end
 -- Test 4: Explicit priority override.
 local override_lexer = lexer.new({
     skip = "[ \t\n]+",
+    init_state = function() return nil end,
     patterns = {
         ident = {
             pattern = "[a-zA-Z]+",

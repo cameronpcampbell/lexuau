@@ -8,26 +8,27 @@ local dfa = require("@self/regex/dfa")
 local subpattern = require("@self/subpattern")
 local lexer = require("@self/lexer")
 
-export type PatternConfig = string | {
+export type PatternConfig<S> = string | {
     pattern: string,
     priority: number?,
-    callback: ((string, lexer.Session) -> (string?, {
-        _profile: lexer.Profile
+    callback: ((string, lexer.Session<S>) -> (string?, {
+        _profile: lexer.Profile<S>
     }))?,
 }
 
-export type LexerConfig = {
+export type LexerConfig<S> = {
     skip: string?,
+    init_state: () -> S,
     subpatterns: {
         [string]: string
     }?,
     patterns: {
-        [string]: PatternConfig
+        [string]: PatternConfig<S>
     }
 }
 
-export type Lexer = {
-    _profile: lexer.Profile,
+export type Lexer<S> = {
+    _profile: lexer.Profile<S>,
     _patterns: { [string]: string },
     lex: (content: string) -> () -> (string, string?),
 }
@@ -60,12 +61,12 @@ local function check_conflicts(
     error(`Pattern conflicts detected:\n{table.concat(unique, "\n")}`)
 end
 
-local function new<Config>(
-    config: LexerConfig
-): Lexer
+local function new<S>(
+    config: LexerConfig<S>
+): Lexer<S>
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
-    local callbacks: { [string]: ((string, lexer.Session) -> (string?, lexer.Session?))? } = {}
+    local callbacks: { [string]: ((string, lexer.Session<S>) -> (string?, lexer.Session<S>?))? } = {}
 
     for name, value in config.patterns do
         if type(value) == "string" then
@@ -86,7 +87,7 @@ local function new<Config>(
     local pattern_hirs = {}
     local pattern_names: { [number]: string } = {}
     local pattern_priorities: { [number]: number } = {}
-    local pattern_callbacks: { [number]: (string, lexer.Session) -> (string?, lexer.Session?) } = {}
+    local pattern_callbacks: { [number]: (string, lexer.Session<S>) -> (string?, lexer.Session<S>?) } = {}
     local skip_id: number? = nil
 
     if config.skip ~= nil and (config :: LexerConfig).skip ~= "" then
@@ -125,18 +126,19 @@ local function new<Config>(
 
     check_conflicts(conflicts, pattern_names, pattern_priorities)
 
-    local profile: lexer.Profile = {
+    local profile: lexer.Profile<S> = {
         compiled_dfa = compiled_dfa,
         skip_id = skip_id,
         pattern_names = pattern_names,
         pattern_callbacks = pattern_callbacks,
+        init_state = config.init_state,
     }
 
     return {
         _profile = profile,
         _patterns = {},
         lex = function(content: string)
-            return lexer.new(profile, content) :: any
+            return lexer.new(profile, content, profile.init_state()) :: any
         end,
     }
 end

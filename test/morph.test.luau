@@ -8,6 +8,7 @@ local inner
 
 local outer = lexuau.new({
 	skip = "[ \t\n]+",
+	init_state = function() return nil end,
 	subpatterns = {},
 	patterns = {
 		comment_start = {
@@ -21,6 +22,7 @@ local outer = lexuau.new({
 
 inner = lexuau.new({
 	skip = nil,
+	init_state = function() return nil end,
 	subpatterns = {},
 	patterns = {
 

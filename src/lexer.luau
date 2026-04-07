@@ -7,14 +7,15 @@ type DFA = dfa.DFA
 local Session = {}
 Session.__index = Session
 
-export type Profile = {
+export type Profile<S> = {
 	compiled_dfa: DFA,
 	skip_id: number?,
 	pattern_names: { [number]: string },
-	pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
+	pattern_callbacks: { [number]: (string, Session<S>) -> (string?, Session<S>?) },
+	init_state: () -> S,
 }
 
-export type Session = setmetatable<{
+export type Session<S> = setmetatable<{
 	position: number,
 	length: number,
 	content: string,
@@ -22,13 +23,14 @@ export type Session = setmetatable<{
 	start: number,
 	skip_id: number?,
 	pattern_names: { [number]: string },
-	pattern_callbacks: { [number]: (string, Session) -> (string?, Session?) },
+	pattern_callbacks: { [number]: (string, Session<S>) -> (string?, Session<S>?) },
 	morphed: boolean,
 	in_callback: boolean,
-	successor: Session?,
+	successor: Session<S>?,
+	state: S,
 }, typeof(Session)>
 
-function Session.new(profile: Profile, content: string, position: number?): Session
+function Session.new<S>(profile: Profile<S>, content: string, state: S, position: number?): Session<S>
 	return setmetatable({
 		position = position or 1,
 		length = #content,
@@ -40,11 +42,12 @@ function Session.new(profile: Profile, content: string, position: number?): Sess
 		pattern_callbacks = profile.pattern_callbacks,
 		morphed = false,
 		in_callback = false,
-		successor = nil :: Session?,
+		successor = nil :: Session<S>?,
+		state = state,
 	}, Session)
 end
 
-function Session.morph<T>(self: Session, target: T & { _profile: Profile }): T
+function Session.morph<S, T>(self: Session<S>, target: T & { _profile: Profile<S> }): T
 	if not self.in_callback then
 		error("Cannot morph outside of a callback.")
 	end
@@ -54,11 +57,11 @@ function Session.morph<T>(self: Session, target: T & { _profile: Profile }): T
 	end
 
 	self.morphed = true
-	self.successor = Session.new(target._profile, self.content, self.position)
+	self.successor = Session.new(target._profile, self.content, self.state, self.position)
 	return target
 end
 
-function Session.__iter(self: Session)
+function Session.__iter<S>(self: Session<S>)
 	return function(): (string?, string?)
 		while self.position <= self.length do
 			if self.morphed then
