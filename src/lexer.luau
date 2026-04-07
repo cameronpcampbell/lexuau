@@ -128,7 +128,7 @@ function Session.__iter<S>(self: Session<S>)
 
 				-- If the callback morphed, follow the successor.
 				if self.successor then
-					self = self.successor :: Session
+					self = self.successor :: Session<S>
 				end
 
 				if result == nil then

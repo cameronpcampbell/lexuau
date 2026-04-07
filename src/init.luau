@@ -90,10 +90,10 @@ local function new<S>(
     local pattern_callbacks: { [number]: (string, lexer.Session<S>) -> (string?, lexer.Session<S>?) } = {}
     local skip_id: number? = nil
 
-    if config.skip ~= nil and (config :: LexerConfig).skip ~= "" then
+    if config.skip ~= nil and (config :: LexerConfig<S>).skip ~= "" then
         local resolved_skip = subpattern.resolve(
-            (config :: LexerConfig).subpatterns :: { [string]: string }?,
-            { _skip = (config :: LexerConfig).skip }
+            (config :: LexerConfig<S>).subpatterns :: { [string]: string }?,
+            { _skip = (config :: LexerConfig<S>).skip }
         )._skip
 
         local skip_hir = regex_parser.parse(resolved_skip)
