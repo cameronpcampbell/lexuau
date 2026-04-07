@@ -11,7 +11,7 @@ export type Profile<S> = {
 	compiled_dfa: DFA,
 	skip_id: number?,
 	pattern_names: { [number]: string },
-	pattern_callbacks: { [number]: (string, Session<S>) -> (string?, Session<S>?) },
+	pattern_callbacks: { [number]: (string, Session<S>, S) -> (string?, Session<S>?) },
 	init_state: () -> S,
 }
 
@@ -23,7 +23,7 @@ export type Session<S> = setmetatable<{
 	start: number,
 	skip_id: number?,
 	pattern_names: { [number]: string },
-	pattern_callbacks: { [number]: (string, Session<S>) -> (string?, Session<S>?) },
+	pattern_callbacks: { [number]: (string, Session<S>, S) -> (string?, Session<S>?) },
 	morphed: boolean,
 	in_callback: boolean,
 	successor: Session<S>?,
@@ -123,7 +123,7 @@ function Session.__iter<S>(self: Session<S>)
 
 			if callback then
 				self.in_callback = true
-				local result = callback(value, self)
+				local result = callback(value, self, self.state)
 				self.in_callback = false
 
 				-- If the callback morphed, follow the successor.

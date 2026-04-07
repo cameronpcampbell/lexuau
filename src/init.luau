@@ -11,7 +11,7 @@ local lexer = require("@self/lexer")
 export type PatternConfig<S> = string | {
     pattern: string,
     priority: number?,
-    callback: ((string, lexer.Session<S>) -> (string?, {
+    callback: ((string, lexer.Session<S>, S) -> (string?, {
         _profile: lexer.Profile<S>
     }))?,
 }
@@ -66,7 +66,7 @@ local function new<S>(
 ): Lexer<S>
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
-    local callbacks: { [string]: ((string, lexer.Session<S>) -> (string?, lexer.Session<S>?))? } = {}
+    local callbacks: { [string]: ((string, lexer.Session<S>, S) -> (string?, lexer.Session<S>?))? } = {}
 
     for name, value in config.patterns do
         if type(value) == "string" then
@@ -87,7 +87,7 @@ local function new<S>(
     local pattern_hirs = {}
     local pattern_names: { [number]: string } = {}
     local pattern_priorities: { [number]: number } = {}
-    local pattern_callbacks: { [number]: (string, lexer.Session<S>) -> (string?, lexer.Session<S>?) } = {}
+    local pattern_callbacks: { [number]: (string, lexer.Session<S>, S) -> (string?, lexer.Session<S>?) } = {}
     local skip_id: number? = nil
 
     if config.skip ~= nil and (config :: LexerConfig<S>).skip ~= "" then
