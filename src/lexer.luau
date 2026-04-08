@@ -11,7 +11,7 @@ export type Profile<S> = {
 	compiled_dfa: DFA,
 	skip_id: number?,
 	pattern_names: { [number]: string },
-	pattern_callbacks: { [number]: (string, Session<S>, S) -> (string?, Session<S>?) },
+	pattern_callbacks: { [number]: (string, S) -> (string?, { _profile: Profile<S> }?) },
 	init_state: () -> S,
 }
 
@@ -23,10 +23,7 @@ export type Session<S> = setmetatable<{
 	start: number,
 	skip_id: number?,
 	pattern_names: { [number]: string },
-	pattern_callbacks: { [number]: (string, Session<S>, S) -> (string?, Session<S>?) },
-	morphed: boolean,
-	in_callback: boolean,
-	successor: Session<S>?,
+	pattern_callbacks: { [number]: (string, S) -> (string?, { _profile: Profile<S> }?) },
 	state: S,
 }, typeof(Session)>
 
@@ -40,34 +37,13 @@ function Session.new<S>(profile: Profile<S>, content: string, state: S, position
 		skip_id = profile.skip_id,
 		pattern_names = profile.pattern_names,
 		pattern_callbacks = profile.pattern_callbacks,
-		morphed = false,
-		in_callback = false,
-		successor = nil :: Session<S>?,
 		state = state,
 	}, Session)
-end
-
-function Session.morph<S, T>(self: Session<S>, target: T & { _profile: Profile<S> }): T
-	if not self.in_callback then
-		error("Cannot morph outside of a callback.")
-	end
-
-	if self.morphed then
-		error("Cannot morph an already morphed session.")
-	end
-
-	self.morphed = true
-	self.successor = Session.new(target._profile, self.content, self.state, self.position)
-	return target
 end
 
 function Session.__iter<S>(self: Session<S>)
 	return function(): (string?, string?)
 		while self.position <= self.length do
-			if self.morphed then
-				return nil, nil
-			end
-
 			local states = self.states
 			local current_state = self.start
 			local last_accept_id: number? = nil
@@ -122,13 +98,10 @@ function Session.__iter<S>(self: Session<S>)
 			local callback = self.pattern_callbacks[last_accept_id]
 
 			if callback then
-				self.in_callback = true
-				local result = callback(value, self, self.state)
-				self.in_callback = false
+				local result, morph_target = callback(value, self.state)
 
-				-- If the callback morphed, follow the successor.
-				if self.successor then
-					self = self.successor :: Session<S>
+				if morph_target then
+					self = Session.new(morph_target._profile, self.content, self.state, self.position)
 				end
 
 				if result == nil then

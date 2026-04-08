@@ -2,7 +2,7 @@
 
 local lexuau = require("@src")
 
-local my_lexer = lexuau.new({
+local my_lexer = lexuau.new<<nil>>({
     skip = "[ \t\n\r\f]+",
     init_state = function() return nil end,
 

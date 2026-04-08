@@ -8,27 +8,38 @@ local dfa = require("@self/regex/dfa")
 local subpattern = require("@self/subpattern")
 local lexer = require("@self/lexer")
 
-export type PatternConfig<S> = string | {
+type function If(
+    condition: type,
+    truthy: type,
+    falsey: type
+): type
+    local is_falsey =
+        condition == nil or
+        condition == types.singleton(false) or
+        condition == types.never
+
+    return if is_falsey then falsey else truthy
+end
+
+export type PatternConfig<State> = string | {
     pattern: string,
     priority: number?,
-    callback: ((string, lexer.Session<S>, S) -> (string?, {
-        _profile: lexer.Profile<S>
-    }))?,
+    callback: (string, State) -> (string?, Lexer<State>?)?,
 }
 
-export type LexerConfig<S> = {
+export type LexerConfig<State> = {
     skip: string?,
-    init_state: () -> S,
+    init_state: () -> State,
     subpatterns: {
         [string]: string
     }?,
     patterns: {
-        [string]: PatternConfig<S>
+        [string]: PatternConfig<State>
     }
 }
 
-export type Lexer<S> = {
-    _profile: lexer.Profile<S>,
+export type Lexer<State> = {
+    _profile: lexer.Profile<State>,
     _patterns: { [string]: string },
     lex: (content: string) -> () -> (string, string?),
 }
@@ -61,12 +72,12 @@ local function check_conflicts(
     error(`Pattern conflicts detected:\n{table.concat(unique, "\n")}`)
 end
 
-local function new<S>(
-    config: LexerConfig<S>
-): Lexer<S>
+local function new<State>(
+    config: LexerConfig<State>
+): Lexer<State>
     local raw_patterns: { [string]: string } = {}
     local user_priorities: { [string]: number? } = {}
-    local callbacks: { [string]: ((string, lexer.Session<S>, S) -> (string?, lexer.Session<S>?))? } = {}
+    local callbacks: { [string]: ((string, State) -> (string?, { _profile: lexer.Profile<State> }?))? } = {}
 
     for name, value in config.patterns do
         if type(value) == "string" then
@@ -87,13 +98,13 @@ local function new<S>(
     local pattern_hirs = {}
     local pattern_names: { [number]: string } = {}
     local pattern_priorities: { [number]: number } = {}
-    local pattern_callbacks: { [number]: (string, lexer.Session<S>, S) -> (string?, lexer.Session<S>?) } = {}
+    local pattern_callbacks: { [number]: (string, State) -> (string?, { _profile: lexer.Profile<State> }?) } = {}
     local skip_id: number? = nil
 
-    if config.skip ~= nil and (config :: LexerConfig<S>).skip ~= "" then
+    if config.skip ~= nil and (config :: LexerConfig<State>).skip ~= "" then
         local resolved_skip = subpattern.resolve(
-            (config :: LexerConfig<S>).subpatterns :: { [string]: string }?,
-            { _skip = (config :: LexerConfig<S>).skip }
+            (config :: LexerConfig<State>).subpatterns :: { [string]: string }?,
+            { _skip = (config :: LexerConfig<State>).skip }
         )._skip
 
         local skip_hir = regex_parser.parse(resolved_skip)
@@ -126,7 +137,7 @@ local function new<S>(
 
     check_conflicts(conflicts, pattern_names, pattern_priorities)
 
-    local profile: lexer.Profile<S> = {
+    local profile: lexer.Profile<State> = {
         compiled_dfa = compiled_dfa,
         skip_id = skip_id,
         pattern_names = pattern_names,
