@@ -3,15 +3,50 @@ A lexer generation library for Luau.
 
 Strongly inspired from [logos](https://github.com/maciejhirsz/logos).
 
+## Installation
+
+Install the package matching your environment with Pesde.
+
+For Roblox:
+
+```sh
+pesde add cameronpcampbell/lexuau@0.1.0 -t roblox
+```
+
+```toml
+[dependencies]
+lexuau = { name = "cameronpcampbell/lexuau", version = "^0.1.0", target = "roblox" }
+```
+
+For standalone Luau:
+
+```sh
+pesde add cameronpcampbell/lexuau@0.1.0 -t luau
+```
+
+```toml
+[dependencies]
+lexuau = { name = "cameronpcampbell/lexuau", version = "^0.1.0", target = "luau" }
+```
+
+The repository keeps Roblox as its canonical development target. Releases publish
+both target variants from the same source and version.
+
 ## Example Usage
+
+The example below uses a Roblox package path. For standalone Luau, require
+`./luau_packages/lexuau` instead.
 
 ```luau
 --!strict
 
-local lexuau = require("path/to/lexuau")
+local lexuau = require(path.to.lexuau)
 
 local my_lexer = lexuau.new({
     skip = "[ \t\n\r\f]+",
+    init_state = function()
+        return nil
+    end,
 
     subpatterns = {
         numsect = "_*[\\d]+_*",
@@ -23,8 +58,8 @@ local my_lexer = lexuau.new({
         eq_sign = "=",
         ident = "[a-zA-Z_-]+",
         number = "(?&num)",
-        string = "'[^']+'|\"[^\"]+\""
-    }
+        string = "'[^']+'|\"[^\"]+\"",
+    },
 })
 
 local lexed = my_lexer.lex([[

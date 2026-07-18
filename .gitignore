@@ -10,6 +10,13 @@
 
 /sourcemap.json
 
+# Pesde
+/.pesde/
+/luau_packages/
+/lune_packages/
+/roblox_packages/
+/package.tar.gz
+
 # IDEs
 .idea/       # JetBrains (CLion, IntelliJ, etc.)
 .vscode/

@@ -1,0 +1,413 @@
+name: Lexuau Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: lexuau-release
+  cancel-in-progress: false
+
+env:
+  PESDE_RELEASE: "v0.7.3+registry.0.2.3"
+
+jobs:
+  preflight:
+    name: Preflight Checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pesde
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          INSTALL_ROOT="$RUNNER_TEMP/pesde"
+          mkdir -p "$INSTALL_ROOT" "$INSTALL_ROOT/bin" "$INSTALL_ROOT/extracted"
+          gh release download "$PESDE_RELEASE" \
+            --repo pesde-pkg/pesde \
+            --pattern "*linux-x86_64.zip" \
+            --dir "$INSTALL_ROOT"
+
+          ARCHIVE="$(find "$INSTALL_ROOT" -maxdepth 1 -type f -name '*linux-x86_64.zip' -print -quit)"
+          if [ -z "$ARCHIVE" ]; then
+            echo "::error::Could not find the downloaded pesde archive."
+            exit 1
+          fi
+
+          unzip -q "$ARCHIVE" -d "$INSTALL_ROOT/extracted"
+          PESDE_BIN="$(find "$INSTALL_ROOT/extracted" -type f -name pesde -print -quit)"
+          if [ -z "$PESDE_BIN" ]; then
+            echo "::error::Could not find the pesde binary in the downloaded archive."
+            exit 1
+          fi
+
+          install -m 0755 "$PESDE_BIN" "$INSTALL_ROOT/bin/pesde"
+          echo "$INSTALL_ROOT/bin" >> "$GITHUB_PATH"
+
+          EXPECTED_VERSION="${PESDE_RELEASE#v}"
+          EXPECTED_VERSION="${EXPECTED_VERSION%%+*}"
+          ACTUAL_VERSION="$("$INSTALL_ROOT/bin/pesde" -v)"
+          if [ "$ACTUAL_VERSION" != "pesde $EXPECTED_VERSION" ]; then
+            echo "::error::Expected pesde $EXPECTED_VERSION, got $ACTUAL_VERSION."
+            exit 1
+          fi
+          printf '%s\n' "$ACTUAL_VERSION"
+
+      - name: Check release metadata
+        run: |
+          TAG="${{ github.ref_name }}"
+          TAG_VERSION="${TAG#v}"
+          MANIFEST_VERSION="$(awk -F '"' '/^version = "/ { print $2; exit }' pesde.toml)"
+
+          if [ "$MANIFEST_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::pesde.toml version ($MANIFEST_VERSION) does not match tag ($TAG)."
+            exit 1
+          fi
+
+          if ! grep -Fxq 'environment = "roblox"' pesde.toml; then
+            echo "::error::The checked-in pesde.toml must use the canonical Roblox target."
+            exit 1
+          fi
+
+          if ! grep -Fxq 'build_files = ["src"]' pesde.toml; then
+            echo "::error::The canonical Roblox target must build the src directory."
+            exit 1
+          fi
+
+          if ! grep -Fxq "# $TAG" CHANGELOG.md; then
+            echo "::error::No '# $TAG' entry exists in CHANGELOG.md."
+            exit 1
+          fi
+
+      - name: Verify canonical lockfile
+        run: |
+          cp pesde.lock "$RUNNER_TEMP/pesde.lock.before"
+          pesde install
+
+          if ! diff -u "$RUNNER_TEMP/pesde.lock.before" pesde.lock; then
+            echo "::error::pesde.lock is stale. Regenerate and commit it before tagging."
+            exit 1
+          fi
+
+          MANIFEST_VERSION="$(awk -F '"' '/^version = "/ { print $2; exit }' pesde.toml)"
+          LOCK_VERSION="$(awk -F '"' '/^version = "/ { print $2; exit }' pesde.lock)"
+          LOCK_TARGET="$(awk -F '"' '/^target = "/ { print $2; exit }' pesde.lock)"
+
+          if [ "$LOCK_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::pesde.lock version ($LOCK_VERSION) does not match pesde.toml ($MANIFEST_VERSION)."
+            exit 1
+          fi
+
+          if [ "$LOCK_TARGET" != "roblox" ]; then
+            echo "::error::The checked-in pesde.lock must target Roblox."
+            exit 1
+          fi
+
+          pesde install --locked
+
+      - name: Build and inspect both package targets
+        run: |
+          set -o pipefail
+
+          cp pesde.toml "$RUNNER_TEMP/pesde.toml.roblox"
+          cp pesde.lock "$RUNNER_TEMP/pesde.lock.roblox"
+
+          {
+            printf '%s\n' LICENSE.md README.md pesde.toml
+            find src -type f -name '*.luau' -print
+          } | LC_ALL=C sort > "$RUNNER_TEMP/expected-package-files.txt"
+
+          configure_target() {
+            TARGET="$1"
+            cp "$RUNNER_TEMP/pesde.toml.roblox" pesde.toml
+            cp "$RUNNER_TEMP/pesde.lock.roblox" pesde.lock
+
+            case "$TARGET" in
+              roblox)
+                ;;
+              luau)
+                sed -i 's/^environment = "roblox"$/environment = "luau"/' pesde.toml
+                sed -i '/^build_files = \["src"\]$/d' pesde.toml
+                ;;
+              *)
+                echo "::error::Unknown target: $TARGET"
+                exit 1
+                ;;
+            esac
+
+            if ! grep -Fxq "environment = \"$TARGET\"" pesde.toml; then
+              echo "::error::Failed to configure the $TARGET manifest."
+              exit 1
+            fi
+
+            if [ "$TARGET" = "luau" ] && grep -q '^build_files = ' pesde.toml; then
+              echo "::error::The Luau manifest must not contain build_files."
+              exit 1
+            fi
+
+            pesde install
+            pesde install --locked
+          }
+
+          for TARGET in roblox luau; do
+            echo "Validating $TARGET package"
+            configure_target "$TARGET"
+
+            PUBLISH_LOG="$RUNNER_TEMP/pesde-$TARGET-dry-run.log"
+            if pesde publish --dry-run --yes 2>&1 | tee "$PUBLISH_LOG"; then
+              PUBLISH_STATUS=0
+            else
+              PUBLISH_STATUS=$?
+            fi
+
+            if [ "$PUBLISH_STATUS" -ne 0 ]; then
+              echo "::error::The $TARGET dry run exited with status $PUBLISH_STATUS."
+              exit "$PUBLISH_STATUS"
+            fi
+
+            if grep -Fq "error occurred publishing" "$PUBLISH_LOG"; then
+              echo "::error::pesde reported a $TARGET dry-run publishing error."
+              exit 1
+            fi
+
+            tar -tzf package.tar.gz | LC_ALL=C sort > "$RUNNER_TEMP/actual-$TARGET-package-files.txt"
+            if ! diff -u "$RUNNER_TEMP/expected-package-files.txt" "$RUNNER_TEMP/actual-$TARGET-package-files.txt"; then
+              echo "::error::The $TARGET archive contains unexpected or missing files."
+              exit 1
+            fi
+          done
+
+  create-release:
+    name: Create Draft Release
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+
+          CHANGELOG="$(awk -v tag="$TAG" '
+            BEGIN { found=0 }
+            /^# / {
+              if (found) exit
+              if ($0 == "# " tag) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md | sed '/./,$!d' | sed -e :a -e '/^\n*$/{$d;N;ba}')"
+
+          if [ -z "$CHANGELOG" ]; then
+            echo "::error::No changelog entry found for $TAG in CHANGELOG.md."
+            exit 1
+          fi
+
+          CHANGELOG="$(printf '%s' "$CHANGELOG" | sed 's/^#/##/')"
+          PESDE_URL="https://pesde.dev/packages/cameronpcampbell/lexuau"
+
+          cat > "$RUNNER_TEMP/release_body.md" <<EOF
+          # Changelog
+          ${CHANGELOG}
+
+          ---
+
+          # pesde
+          [View Lexuau on pesde](${PESDE_URL}).
+
+          ## Roblox
+
+          \`\`\`sh
+          pesde add cameronpcampbell/lexuau@${VERSION} -t roblox
+          \`\`\`
+
+          \`\`\`toml
+          [dependencies]
+          lexuau = { name = "cameronpcampbell/lexuau", version = "^${VERSION}", target = "roblox" }
+          \`\`\`
+
+          ## Standalone Luau
+
+          \`\`\`sh
+          pesde add cameronpcampbell/lexuau@${VERSION} -t luau
+          \`\`\`
+
+          \`\`\`toml
+          [dependencies]
+          lexuau = { name = "cameronpcampbell/lexuau", version = "^${VERSION}", target = "luau" }
+          \`\`\`
+          EOF
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists. Updating it as a draft."
+            gh release edit "$TAG" --draft --title "Lexuau $TAG" --notes-file "$RUNNER_TEMP/release_body.md"
+          else
+            gh release create "$TAG" --draft --verify-tag --title "Lexuau $TAG" --notes-file "$RUNNER_TEMP/release_body.md"
+          fi
+
+  publish-package:
+    name: Publish Both Targets to pesde
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pesde
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          INSTALL_ROOT="$RUNNER_TEMP/pesde"
+          mkdir -p "$INSTALL_ROOT" "$INSTALL_ROOT/bin" "$INSTALL_ROOT/extracted"
+          gh release download "$PESDE_RELEASE" \
+            --repo pesde-pkg/pesde \
+            --pattern "*linux-x86_64.zip" \
+            --dir "$INSTALL_ROOT"
+
+          ARCHIVE="$(find "$INSTALL_ROOT" -maxdepth 1 -type f -name '*linux-x86_64.zip' -print -quit)"
+          if [ -z "$ARCHIVE" ]; then
+            echo "::error::Could not find the downloaded pesde archive."
+            exit 1
+          fi
+
+          unzip -q "$ARCHIVE" -d "$INSTALL_ROOT/extracted"
+          PESDE_BIN="$(find "$INSTALL_ROOT/extracted" -type f -name pesde -print -quit)"
+          if [ -z "$PESDE_BIN" ]; then
+            echo "::error::Could not find the pesde binary in the downloaded archive."
+            exit 1
+          fi
+
+          install -m 0755 "$PESDE_BIN" "$INSTALL_ROOT/bin/pesde"
+          echo "$INSTALL_ROOT/bin" >> "$GITHUB_PATH"
+
+          EXPECTED_VERSION="${PESDE_RELEASE#v}"
+          EXPECTED_VERSION="${EXPECTED_VERSION%%+*}"
+          ACTUAL_VERSION="$("$INSTALL_ROOT/bin/pesde" -v)"
+          if [ "$ACTUAL_VERSION" != "pesde $EXPECTED_VERSION" ]; then
+            echo "::error::Expected pesde $EXPECTED_VERSION, got $ACTUAL_VERSION."
+            exit 1
+          fi
+          printf '%s\n' "$ACTUAL_VERSION"
+
+      - name: Verify canonical package state
+        run: pesde install --locked
+
+      - name: Authenticate with pesde
+        env:
+          PESDE_TOKEN: ${{ secrets.PESDE_TOKEN }}
+        run: |
+          if [ -z "$PESDE_TOKEN" ]; then
+            echo "::error::The PESDE_TOKEN repository secret is not configured."
+            exit 1
+          fi
+
+          pesde auth login --token "$PESDE_TOKEN"
+          pesde auth whoami
+
+      - name: Publish Roblox and Luau packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          INDEX_API="repos/pesde-pkg/index/contents/cameronpcampbell/lexuau"
+
+          cp pesde.toml "$RUNNER_TEMP/pesde.toml.roblox"
+          cp pesde.lock "$RUNNER_TEMP/pesde.lock.roblox"
+
+          configure_target() {
+            local target="$1"
+            cp "$RUNNER_TEMP/pesde.toml.roblox" pesde.toml
+            cp "$RUNNER_TEMP/pesde.lock.roblox" pesde.lock
+
+            case "$target" in
+              roblox)
+                ;;
+              luau)
+                sed -i 's/^environment = "roblox"$/environment = "luau"/' pesde.toml
+                sed -i '/^build_files = \["src"\]$/d' pesde.toml
+                ;;
+              *)
+                echo "::error::Unknown target: $target"
+                exit 1
+                ;;
+            esac
+
+            if ! grep -Fxq "environment = \"$target\"" pesde.toml; then
+              echo "::error::Failed to configure the $target manifest."
+              exit 1
+            fi
+
+            if [ "$target" = "luau" ] && grep -q '^build_files = ' pesde.toml; then
+              echo "::error::The Luau manifest must not contain build_files."
+              exit 1
+            fi
+
+            pesde install
+            pesde install --locked
+          }
+
+          already_published() {
+            local target="$1"
+            local index_entry
+
+            if ! index_entry="$(gh api "$INDEX_API" -H 'Accept: application/vnd.github.raw+json' 2>/dev/null)"; then
+              return 1
+            fi
+
+            grep -Fq "[\"$VERSION $target\"]" <<< "$index_entry"
+          }
+
+          publish_target() {
+            local target="$1"
+            local publish_log="$RUNNER_TEMP/pesde-$target-publish.log"
+            local publish_status
+
+            configure_target "$target"
+
+            if already_published "$target"; then
+              echo "cameronpcampbell/lexuau@$VERSION $target is already published; skipping."
+              return
+            fi
+
+            if pesde publish --yes 2>&1 | tee "$publish_log"; then
+              publish_status=0
+            else
+              publish_status=$?
+            fi
+
+            if [ "$publish_status" -ne 0 ]; then
+              echo "::error::The $target publish exited with status $publish_status."
+              exit "$publish_status"
+            fi
+
+            if grep -Fq "error occurred publishing" "$publish_log"; then
+              echo "::error::pesde reported a $target publishing error."
+              exit 1
+            fi
+          }
+
+          publish_target roblox
+          publish_target luau
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: publish-package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release edit "${{ github.ref_name }}" --draft=false --repo "${{ github.repository }}"

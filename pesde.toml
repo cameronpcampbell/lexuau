@@ -1,0 +1,24 @@
+name = "cameronpcampbell/lexuau"
+version = "0.1.0"
+description = "A lexer generation library for Luau."
+license = "MIT"
+authors = ["Cameron P Campbell"]
+repository = "https://github.com/cameronpcampbell/lexuau"
+
+includes = [
+    "pesde.toml",
+    "README.md",
+    "LICENSE.md",
+    "src/**/*.luau",
+]
+
+[target]
+environment = "roblox"
+lib = "src/init.luau"
+build_files = ["src"]
+
+[indices]
+default = "https://github.com/pesde-pkg/index"
+
+[engines]
+pesde = "^0.7.3"

@@ -1,0 +1,5 @@
+# This file lists tools managed by Rokit, a toolchain manager for Roblox projects.
+
+[tools]
+pesde = "pesde-pkg/pesde@0.7.3+registry.0.2.3"
+luau-lsp = "JohnnyMorganz/luau-lsp@1.68.1"
